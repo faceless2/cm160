@@ -10,3 +10,10 @@ Sample usage
 ```
 cm160 --host mqtt.local --port 1883 --voltage 230
 ```
+
+## Building
+
+```
+apt install libusb-dev libmosquitto-dev
+gcc *.c -Wall -o cm160 -lmosquitto -lusb
+```
