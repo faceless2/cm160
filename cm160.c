@@ -27,6 +27,7 @@
  *
  *   apt install libusb-dev libmosquitto-dev
  *   gcc *.c -Wall -o cm160 -lmosquitto -lusb
+ *   (or  gcc *.c -Wall -o cm160 -lmosquitto /usr/lib/x86_64-linux-gnu/libusb.a)
  *
  */
 
