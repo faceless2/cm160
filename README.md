@@ -1,10 +1,12 @@
 # cm160
 Connect to OWL CM160 energy monitor and relay the live data to MQTT
 
-This is a cut down version of originals found at
+Based on a number of sources including
 
 * https://github.com/cornetp/eagle-owl
 * https://groups.google.com/g/openhab/c/G4_yariNZRk/m/IYo0j6cRCBwJ
+* https://sourceforge.net/p/electricowl/discussion/1083264/thread/7f01752f/?limit=25#693c
+
 
 Sample usage
 ```
@@ -15,5 +17,5 @@ cm160 --host mqtt.local --port 1883 --voltage 230
 
 ```
 apt install libusb-dev libmosquitto-dev
-gcc *.c -Wall -o cm160 -lmosquitto -lusb
+gcc *.c -Wall -o cm160 -lmosquitto -lusb-1.0
 ```
