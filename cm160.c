@@ -101,7 +101,8 @@ char mqtt_announce_topic[100];
 char hostname[100];
 char *programname;
 int voltage = 230;       // voltage used to calculate watts (Owl reports amps only)
-int debug = 0;
+int debug = 0, all = 0;
+time_t last;
 static volatile int active = 1;
 
 
@@ -232,13 +233,17 @@ int process_frame(cm160_t *cm160) {
                 tm->tm_min = cm160->buf[5];
                 time_t t = mktime(tm);
                 bool avail = (cm160->buf[2] & 0x40) != 0;
-
                 float amps = (cm160->buf[8] + (cm160->buf[9]<<8)) * 0.07; // mean intensity during one minute
                 float watts = amps * voltage; // mean power during one minute
-                char buf[400];
-                sprintf(buf, "{\"type\":\"cm160\",\"serial\":\"%s\",\"amps\":%1.2f,\"watts\":%d,\"unitwhen\":%ld%s%s,\"when\":%" PRIu64 ",\"who\":\"%s\",\"where\":\"%s\"}", cm160->serial, amps, (int)watts, t, (avail?",\"more\":true":""), (newdata?"":",\"old\":true"), millis()/1000, programname, hostname);
-                mosquitto_publish(mosq, NULL, mqtt_topic, strlen(buf), buf, 0, 0);
-                printf("%s\n", buf);
+                if (all || t > last) {
+                    char buf[400];
+                    sprintf(buf, "{\"type\":\"cm160\",\"serial\":\"%s\",\"amps\":%1.2f,\"watts\":%d,\"unitwhen\":%ld%s%s,\"when\":%" PRIu64 ",\"who\":\"%s\",\"where\":\"%s\"}", cm160->serial, amps, (int)watts, t, (avail?",\"more\":true":""), (newdata?"":",\"old\":true"), millis()/1000, programname, hostname);
+                    mosquitto_publish(mosq, NULL, mqtt_topic, strlen(buf), buf, 0, 0);
+                    printf("%s\n", buf);
+                    if (t > last) {
+                        last = t;
+                    }
+                }
             }
 
             return 11;
@@ -261,7 +266,17 @@ int process_frame(cm160_t *cm160) {
 }
 
 void usage() {
-    printf("Usage: %s [--host <mqtt-server>] [--port <mqtt-port>] [--topic <mqtt-topic>] [--announce-topic <mqtt-topic>] [--voltage <voltage>]\n\n", programname);
+    printf("Usage: %s [--debug] [--all] [--host <mqtt-server>] [--port <mqtt-port>] [--topic <mqtt-topic>] [--announce-topic <mqtt-topic>] [--voltage <voltage>]\n\n", programname);
+    printf(" --debug           log everything to stdout\n");
+    printf(" --all             report historical data (there can be a lot of it)\n");
+    printf(" --host            the MQTT host to talk to (default: localhost)\n");
+    printf(" --topic           the MQTT topic (default: cm160)\n");
+    printf(" --announce-topic  if set, the MQTT topic to announce program start and stop (default: not set)\n");
+    printf(" --voltage         the system voltage to calculate watts from amps (default: 230)\n");
+    printf("\n");
+    printf("MQTT reports include \"unitwhen\" (date set on the unit) and \"when\" (date message received). \"unitwhen\"\n");
+    printf("may not be correct and may go backwards if historical data is being reported.\n");
+    printf("\n");
     exit(-1);
 }
 
@@ -307,6 +322,8 @@ int main(int argc, char **argv) {
             voltage = v;
         } else if (!strcmp("--debug", argv[i])) {
             debug = 1;
+        } else if (!strcmp("--all", argv[i])) {
+            all = 1;
         } else {
             usage();
         }
