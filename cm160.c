@@ -26,8 +26,8 @@
  * To build
  *
  *   apt install libusb-dev libmosquitto-dev
- *   gcc *.c -Wall -o cm160 -lmosquitto -lusb
- *   (or  gcc *.c -Wall -o cm160 -lmosquitto /usr/lib/x86_64-linux-gnu/libusb.a)
+ *   gcc cm160.c -Wall -o cm160 -lmosquitto -lusb-1.0
+ *   (or  gcc cm160.c -Wall -o cm160 -lmosquitto /usr/lib/x86_64-linux-gnu/libusb-1.0.a)
  *
  */
 
@@ -43,6 +43,7 @@
 #include <inttypes.h>
 #include <mosquitto.h>
 #include <fcntl.h>
+#include <time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <termios.h>
@@ -83,6 +84,7 @@ typedef struct cm160_struct {
     struct libusb_transfer *transfer_out;
     struct libusb_device_handle *devh;
     uint8_t buf[4096];
+    unsigned char serial[80];
     int buflen;
     uint8_t idcount;
     uint8_t seenlivedata, kernel;
@@ -214,16 +216,27 @@ int process_frame(cm160_t *cm160) {
             //  6,7     cost (it's actually current tarrif), little-endian
             //  8,9     amps, little-endian * 0.07
             //
+            // We WILL see occiasional unprompted bursts of historical data, so the date matters.
+            //
             if (newdata) {
                 cm160->seenlivedata = 1;
             }
             cm160->seenlivedata = 1;
 
             if (cm160->seenlivedata) {
+                struct tm *tm = calloc(sizeof(struct tm), 1);
+                tm->tm_year = cm160->buf[1] + 100;      // wants year since 1900
+                tm->tm_mon = (cm160->buf[2] & 0xF) - 1;
+                tm->tm_mday = cm160->buf[3];
+                tm->tm_hour = cm160->buf[4];
+                tm->tm_min = cm160->buf[5];
+                time_t t = mktime(tm);
+                bool avail = (cm160->buf[2] & 0x40) != 0;
+
                 float amps = (cm160->buf[8] + (cm160->buf[9]<<8)) * 0.07; // mean intensity during one minute
                 float watts = amps * voltage; // mean power during one minute
-                char buf[200];
-                sprintf(buf, "{\"type\":\"cm160\",\"amps\":%1.2f,\"watts\":%d,\"when\":%" PRIu64 ",\"who\":\"%s\",\"where\":\"%s\"}", amps, (int)watts, millis()/1000, programname, hostname);
+                char buf[400];
+                sprintf(buf, "{\"type\":\"cm160\",\"serial\":\"%s\",\"amps\":%1.2f,\"watts\":%d,\"unitwhen\":%ld%s%s,\"when\":%" PRIu64 ",\"who\":\"%s\",\"where\":\"%s\"}", cm160->serial, amps, (int)watts, t, (avail?",\"more\":true":""), (newdata?"":",\"old\":true"), millis()/1000, programname, hostname);
                 mosquitto_publish(mosq, NULL, mqtt_topic, strlen(buf), buf, 0, 0);
                 printf("%s\n", buf);
             }
@@ -370,6 +383,9 @@ int main(int argc, char **argv) {
                             printf("ERROR: libusb_open returned %d (%s)\n", r, libusb_strerror(r));
                             free(cm160);
                             continue;
+                        }
+                        if ((r=libusb_get_string_descriptor_ascii(cm160->devh, desc.iSerialNumber, cm160->serial, sizeof(cm160->serial))) < 0) {
+                            printf("ERROR: libusb_get_string_descriptor_ascii returned %d (%s)\n", r, libusb_strerror(r));
                         }
                         if (libusb_kernel_driver_active(cm160->devh, USB_INTERFACE)) {
                             if (libusb_detach_kernel_driver(cm160->devh, 0)) {
