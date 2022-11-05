@@ -189,6 +189,9 @@ int process_frame(cm160_t *cm160) {
         // 59 0b c1 01 39    c4 09 44 00 83
         // 59 0b c1 01 3b    c4 09 40 00 81
         //
+        // And, also:
+        // 59 ff ff ff ff ff ff ff ff ff 50 
+        //
         // Now srongly suspect that this indicates the USB port is in the wrong serial mode, somehow
         // Fix with ioctl? Would be nice to fix with libusb but that means wading into 
         // https://github.com/torvalds/linux/blob/master/drivers/usb/serial/cp210x.c
@@ -217,14 +220,12 @@ int process_frame(cm160_t *cm160) {
             //  6,7     cost (it's actually current tarrif), little-endian
             //  8,9     amps, little-endian * 0.07
             //
-            // We WILL see occiasional unprompted bursts of historical data, so the date matters.
+            // We WILL see occasional unprompted bursts of historical data, so the date matters.
             //
             if (newdata) {
                 cm160->seenlivedata = 1;
             }
-            cm160->seenlivedata = 1;
-
-            if (cm160->seenlivedata) {
+            if (cm160->seenlivedata && cm160->buf[2] != 0xFF) {        // if buf[2]==ff, everything is ff
                 struct tm *tm = calloc(sizeof(struct tm), 1);
                 tm->tm_year = cm160->buf[1] + 100;      // wants year since 1900
                 tm->tm_mon = (cm160->buf[2] & 0xF) - 1;
