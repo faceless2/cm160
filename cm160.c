@@ -236,12 +236,12 @@ int process_frame(cm160_t *cm160) {
                 bool avail = (cm160->buf[2] & 0x40) != 0;
                 float amps = (cm160->buf[8] + (cm160->buf[9]<<8)) * 0.07; // mean intensity during one minute
                 float watts = amps * voltage; // mean power during one minute
-                if (all || t > last) {
+                if (all || newdata) {
                     char buf[400];
                     sprintf(buf, "{\"type\":\"cm160\",\"serial\":\"%s\",\"amps\":%1.2f,\"watts\":%d,\"unitwhen\":%ld%s%s,\"when\":%" PRIu64 ",\"who\":\"%s\",\"where\":\"%s\"}", cm160->serial, amps, (int)watts, t, (avail?",\"more\":true":""), (newdata?"":",\"old\":true"), millis()/1000, programname, hostname);
                     mosquitto_publish(mosq, NULL, mqtt_topic, strlen(buf), buf, 0, 0);
                     printf("%s\n", buf);
-                    if (t > last) {
+                    if (newdata) {
                         last = t;
                     }
                 }
